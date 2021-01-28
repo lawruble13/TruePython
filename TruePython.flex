@@ -1,6 +1,7 @@
 %{
   #include <stdio.h>
   #include <string.h>
+  #include <stdarg.h>
 
   #define BUFLEN 100
 
@@ -17,6 +18,7 @@
   char getHissIDCharacter();
   char getHissStringCharacter();
   void print_escaped_string();
+  void error(int exit_code, const char* error_fmt, ...);
 %}
 NEWLINE \r\n?
 RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
@@ -30,7 +32,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
 %option stack
 %%
 <INITIAL>{
-  his {/* TODO: Illegal input! */}
+  his {error(1, "Encountered unmatched end on line %d.\n", phys_lineno);}
   hiS[ \t]* {
     utf8_buf_len = 0;
     yy_push_state(EMBED);
@@ -142,12 +144,13 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
   HISSs {printf("<<= ");}
   HISSS {printf("**= ");}
   hiiss{NEWLINE}[ \t]* {printf("\\%s",yytext+5); phys_lineno++;}
-  hiiss {/* TODO: Error condition! */}
+  hiiss {error(1, "Illegal escape character '\' on line %d.\n", phys_lineno);}
   "{NEWLINE}[ \t]*" {printf("%s", yytext); phys_lineno++; log_lineno++;}
   [hH]+[iI]+[sS]+ {
     getReferencedIdentifier();
     printf("%s ", utf8_buf);
   }
+  [ \t]* {/* Consume whitespace */}
 }
 <ID>{
   his {
@@ -162,8 +165,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
   }
   {RESERVED} {
     if(getHissIndex() > 64){
-      ;
-      /* TODO: Error condition! */
+      error(1, "Invalid hiss in identifier on line %d.\n", phys_lineno);
     } else {
       utf8_buf[utf8_buf_len++] = getHissIDCharacter();
     }
@@ -176,8 +178,9 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     addNewIdentifier();
   }
   [ \t] {/* Consume all whitespace */}
+  {NEWLINE} {phys_lineno++;}
   . {
-    /* TODO: Error condition! */
+    error(1, "Invalid character in identifier on line %d.\n", phys_lineno);
   }
 }
 <STRING>{
@@ -203,14 +206,11 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     phys_lineno++;
   }
   . {
-    /* TODO: ERROR condition! */
+    error(1, "Invalid character in string on line %d.\n", phys_lineno);
   }
 }
 
 <COMMENT>{
-  his {
-    /* TODO: Error condition! */
-  }
   hiS[ \t]* {
     if(utf8_buf_len > 0){
       utf8_buf[utf8_buf_len] = 0;
@@ -219,7 +219,6 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     }
     yy_push_state(EMBED);
   }
-  [ \t] {/* Consume whitespace */}
   {NEWLINE} {
     if(utf8_buf_len > 0){
       utf8_buf[utf8_buf_len] = 0;
@@ -232,7 +231,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     yy_pop_state();
   }
   . {
-    /* TODO: Error condition! */
+    printf("%c", yytext[0]);
   }
 }
 
@@ -248,7 +247,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     utf8_buf[1] = '\0';
     print_escaped_string();
   } else {
-    /* TODO: Error condition! */
+    error(1, "Invalid hiss in string on line %d.\n", phys_lineno);
   }
 }
 
@@ -310,14 +309,14 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
         printf("%c",'a'+ind-16);
         break;
       default:
-        ;/* TODO: Error condition! */
+        error(1, "Invalid hiss in integer on line %d.\n", phys_lineno);
     }
   }
   [ \t] {
     /* Consume whitespace */
   }
   . {
-    /* TODO: Error condition! */
+    error(1, "Invalid character in integer on line %d.\n", phys_lineno);
   }
 }
 
@@ -369,14 +368,14 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       case 15:
         printf("j");
       default:
-        ;/* TODO: Error condition! */
+        error(1, "Invalid hiss in float on line %d.\n", phys_lineno);
     }
   }
   [ \t] {
     /* Consume whitespace */
   }
   . {
-    /* TODO: Error condition! */
+    error(1, "Invalid character in float on line %d.\n", phys_lineno);
   }
 }
 
@@ -463,7 +462,7 @@ int getHissIndex(){
 char getHissIDCharacter(){
   int ind = getHissIndex();
   if(ind < 2){
-    /* TODO: Error condition! */
+    error(1, "Invalid hiss in ID on line %d.\n", phys_lineno);
   } else if (ind < 12){
     return '0'+ind-2;
   } else if (ind < 38){
@@ -473,7 +472,7 @@ char getHissIDCharacter(){
   } else if (ind < 65){
     return 'A'+ind-39;
   } else {
-    /* TODO: Error condition! */
+    error(1, "Invalid hiss in ID on line %d.\n", phys_lineno);
   }
 }
 
@@ -482,7 +481,7 @@ char getHissStringCharacter(){
   static char caps = 0;
   int ind = getHissIndex();
   if(ind < 2){
-    /* TODO: Error condition! */
+    error(1, "Invalid hiss in string on line %d.\n", phys_lineno);
   } else if(ind < 11){
     switch(ind){
       case 2:
@@ -514,7 +513,7 @@ char getHissStringCharacter(){
     shift = 0;
     return c;
   } else {
-    /* TODO: Error condition! */
+    error(1, "Invalid hiss in string on line %d.\n", phys_lineno);
   }
 }
 void print_escaped_string(){
@@ -551,6 +550,18 @@ void print_escaped_string(){
         printf("%c", *p);
     }
   }
+}
+
+void error(int exit_code, const char* error_fmt, ...){
+  va_list args;
+  va_start(args, error_fmt);
+  fprintf(stderr, "Error: ");
+  vfprintf(stderr, error_fmt, args);
+  for(int i = 0; i < n_identifiers; i++){
+    free(identifiers[i]);
+    free(references[i]);
+  }
+  exit(exit_code);
 }
 
 int main(){
