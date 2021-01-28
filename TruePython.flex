@@ -9,7 +9,6 @@
   int log_lineno = 0;
   unsigned char utf8_buf[BUFLEN+1];
   int utf8_buf_len;
-  char num_parse_string[3];
 
   void addNewIdentifier();
   void getReferencedIdentifier();
@@ -33,7 +32,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
 %%
 <INITIAL>{
   his {error(1, "Encountered unmatched end on line %d.\n", phys_lineno);}
-  hiS[ \t]* {
+  hiS[ \t] {
     utf8_buf_len = 0;
     yy_push_state(EMBED);
   }
@@ -160,7 +159,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     }
     yy_pop_state();
   }
-  hiS[ \t]* {
+  hiS[ \t] {
     yy_push_state(EMBED);
   }
   {RESERVED} {
@@ -193,7 +192,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     printf("\" ");
     yy_pop_state();
   }
-  hiS[ \t]* {
+  hiS[ \t] {
     if(utf8_buf_len > 0){
       utf8_buf[utf8_buf_len] = 0;
       print_escaped_string();
@@ -211,14 +210,6 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
 }
 
 <COMMENT>{
-  hiS[ \t]* {
-    if(utf8_buf_len > 0){
-      utf8_buf[utf8_buf_len] = 0;
-      print_escaped_string();
-      utf8_buf_len = 0;
-    }
-    yy_push_state(EMBED);
-  }
   {NEWLINE} {
     if(utf8_buf_len > 0){
       utf8_buf[utf8_buf_len] = 0;
@@ -387,6 +378,10 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     utf8_buf_len += sprintf(utf8_buf+utf8_buf_len, "hiS");
   }
   [ \t]hiS {
+    if(yy_top_state() == INITIAL){
+      printf("%s", utf8_buf);
+      utf8_buf_len = 0;
+    }
     yy_pop_state();
   }
   . {
@@ -502,12 +497,12 @@ char getHissStringCharacter(){
         shift = 1;
         return '\0';
       case 10:
-        caps = 1;
+        caps ^= 1;
         return '\0';
     }
   } else if (ind < 107) {
     char c = ' '+ind-11;
-    if (caps&shift && ('a' <= c && c <= 'z')){
+    if (caps^shift && ('a' <= c && c <= 'z')){
       c += 'A'-'a';
     }
     shift = 0;
