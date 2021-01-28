@@ -35,5 +35,5 @@ def test  (  arg  )  :
 test  (  "Hello World!"  )
 ```
 
-Inspiration
+[Inspiration](https://programmerhumour.tumblr.com/post/641235752889548800/imagine-if-python-was-this-simple)
 ![alt text](inspiration.png "Logo Title Text 1")
