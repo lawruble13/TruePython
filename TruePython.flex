@@ -1,14 +1,14 @@
 %{
   #include <stdio.h>
-  #include <string.h>
-  #include <stdarg.h>
-
+  #include "tracking_printf.h"
+  #include "color_printf.h"
   #define BUFLEN 100
 
-  int phys_lineno = 0;
-  int log_lineno = 0;
+  typedef unsigned char utf8;
+
+  unsigned int lineno = 0;
   unsigned char utf8_buf[BUFLEN+1];
-  int utf8_buf_len;
+  unsigned int utf8_buf_len;
 
   void addNewIdentifier();
   void getReferencedIdentifier();
@@ -18,8 +18,9 @@
   char getHissStringCharacter();
   void print_escaped_string();
   void error(int exit_code, const char* error_fmt, ...);
+  void info(const char* info_fmt, ...);
 %}
-NEWLINE \r\n?
+NEWLINE \r\n?|\n
 RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
 %x ID
 %x BINARY
@@ -31,123 +32,130 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
 %option stack
 %%
 <INITIAL>{
-  his {error(1, "Encountered unmatched end on line %d.\n", phys_lineno);}
+  his {error(1, "Encountered unmatched end on line %d.\n", lineno);}
   hiS[ \t] {
     utf8_buf_len = 0;
+    info("Begin embed");
     yy_push_state(EMBED);
   }
   hIs[ \t]* {
     utf8_buf_len = 0;
+    info("Begin ID");
     yy_push_state(ID);
   }
   hIS[ \t]* {
     utf8_buf_len = 0;
-    printf("\"");
+    tprintf("\"");
+    info("Begin string");
     yy_push_state(STRING);
   }
   His[ \t]* {
     utf8_buf_len = 0;
+    info("Begin integer");
     yy_push_state(INTEGER);
   }
   HiS[ \t]* {
     utf8_buf_len = 0;
+    info("Begin float");
     yy_push_state(FLOAT);
   }
   HIs[ \t]* {
     utf8_buf_len = 0;
+    info("Begin binary");
     yy_push_state(BINARY);
   }
   HIS[ \t]* {
     utf8_buf_len = 0;
-    printf("# ");
+    tprintf("# ");
+    info("Begin comment");
     yy_push_state(COMMENT);
   }
-  hiss {printf("def");}
-  hisS {printf("if ");}
-  hiSs {printf("elif ");}
-  hiSS {printf("else ");}
-  hIss {printf("and ");}
-  hIsS {printf("or ");}
-  hISs {printf("not ");}
-  hISS {printf(", ");}
-  Hiss {printf("( ");}
-  HisS {printf(") ");}
-  HiSs {printf(": ");}
-  HiSS {printf("for ");}
-  HIss {printf("in ");}
-  HIsS {printf("while ");}
-  HISs {printf("break ");}
-  HISS {printf("continue ");}
-  hiis {printf("from ");}
-  hiiS {printf("import ");}
-  hiIs {printf(".");}
-  hiIS {printf("as");}
-  hIis {printf("False ");}
-  hIiS {printf("None ");}
-  hIIs {printf("True ");}
-  hIIS {printf("assert ");}
-  Hiis {printf("class ");}
-  HiiS {printf("del ");}
-  HiIs {printf("except ");}
-  HiIS {printf("finally ");}
-  HIis {printf("is ");}
-  HIiS {printf("pass ");}
-  HIIs {printf("raise ");}
-  HIIS {printf("return ");}
-  hhis {printf("try ");}
-  hhiS {printf("with ");}
-  hhIs {printf("+ ");}
-  hhIS {printf("- ");}
-  hHis {printf("* ");}
-  hHiS {printf("** ");}
-  hHIs {printf("/ ");}
-  hHIS {printf("// ");}
-  Hhis {printf("%% ");}
-  HhiS {printf("< ");}
-  HhIs {printf("> ");}
-  HhIS {printf("<= ");}
-  HHis {printf(">= ");}
-  HHiS {printf("== ");}
-  HHIs {printf("!= ");}
-  HHIS {printf("= ");}
-  hisss {printf("@ ");}
-  hissS {printf("<< ");}
-  hisSs {printf(">> ");}
-  hisSS {printf("& ");}
-  hiSss {printf("| ");}
-  hiSsS {printf("^ ");}
-  hiSSs {printf("! ");}
-  hiSSS {printf("async ");}
-  hIsss {printf("await ");}
-  hIssS {printf("global ");}
-  hIsSs {printf("lambda ");}
-  hIsSS {printf("nonlocal ");}
-  hISss {printf("yield ");}
-  hISsS {printf("; ");}
-  hISSs {printf("[ ");}
-  hISSS {printf("] ");}
-  Hisss {printf("{ ");}
-  HissS {printf("} ");}
-  HisSs {printf("-> ");}
-  HisSS {printf("+= ");}
-  HiSss {printf("-= ");}
-  HiSsS {printf("*= ");}
-  HiSSs {printf("/= ");}
-  HiSSS {printf("//= ");}
-  HIsss {printf("%%= ");}
-  HIssS {printf("@= ");}
-  HIsSs {printf("&= ");}
-  HIsSS {printf("|= ");}
-  HISss {printf("^= ");}
-  HISsS {printf(">>= ");}
-  HISSs {printf("<<= ");}
-  HISSS {printf("**= ");}
-  hiiss{NEWLINE}[ \t]* {printf("\\%s",yytext+5); phys_lineno++;}
-  hiiss {error(1, "Illegal escape character '\' on line %d.\n", phys_lineno);}
-  "{NEWLINE}[ \t]*" {printf("%s", yytext); phys_lineno++; log_lineno++;}
+  hiss {tprintf("def ");}
+  hisS {tprintf("if ");}
+  hiSs {tprintf("elif ");}
+  hiSS {tprintf("else ");}
+  hIss {tprintf("and ");}
+  hIsS {tprintf("or ");}
+  hISs {tprintf("not ");}
+  hISS {tprintf(", ");}
+  Hiss {tprintf("( ");}
+  HisS {tprintf(") ");}
+  HiSs {tprintf(": ");}
+  HiSS {tprintf("for ");}
+  HIss {tprintf("in ");}
+  HIsS {tprintf("while ");}
+  HISs {tprintf("break ");}
+  HISS {tprintf("continue ");}
+  hiis {tprintf("from ");}
+  hiiS {tprintf("import ");}
+  hiIs {tprintf(".");}
+  hiIS {tprintf("as");}
+  hIis {tprintf("False ");}
+  hIiS {tprintf("None ");}
+  hIIs {tprintf("True ");}
+  hIIS {tprintf("assert ");}
+  Hiis {tprintf("class ");}
+  HiiS {tprintf("del ");}
+  HiIs {tprintf("except ");}
+  HiIS {tprintf("finally ");}
+  HIis {tprintf("is ");}
+  HIiS {tprintf("pass ");}
+  HIIs {tprintf("raise ");}
+  HIIS {tprintf("return ");}
+  hhis {tprintf("try ");}
+  hhiS {tprintf("with ");}
+  hhIs {tprintf("+ ");}
+  hhIS {tprintf("- ");}
+  hHis {tprintf("* ");}
+  hHiS {tprintf("** ");}
+  hHIs {tprintf("/ ");}
+  hHIS {tprintf("// ");}
+  Hhis {tprintf("%% ");}
+  HhiS {tprintf("< ");}
+  HhIs {tprintf("> ");}
+  HhIS {tprintf("<= ");}
+  HHis {tprintf(">= ");}
+  HHiS {tprintf("== ");}
+  HHIs {tprintf("!= ");}
+  HHIS {tprintf("= ");}
+  hisss {tprintf("@ ");}
+  hissS {tprintf("<< ");}
+  hisSs {tprintf(">> ");}
+  hisSS {tprintf("& ");}
+  hiSss {tprintf("| ");}
+  hiSsS {tprintf("^ ");}
+  hiSSs {tprintf("! ");}
+  hiSSS {tprintf("async ");}
+  hIsss {tprintf("await ");}
+  hIssS {tprintf("global ");}
+  hIsSs {tprintf("lambda ");}
+  hIsSS {tprintf("nonlocal ");}
+  hISss {tprintf("yield ");}
+  hISsS {tprintf("; ");}
+  hISSs {tprintf("[ ");}
+  hISSS {tprintf("] ");}
+  Hisss {tprintf("{ ");}
+  HissS {tprintf("} ");}
+  HisSs {tprintf("-> ");}
+  HisSS {tprintf("+= ");}
+  HiSss {tprintf("-= ");}
+  HiSsS {tprintf("*= ");}
+  HiSSs {tprintf("/= ");}
+  HiSSS {tprintf("//= ");}
+  HIsss {tprintf("%%= ");}
+  HIssS {tprintf("@= ");}
+  HIsSs {tprintf("&= ");}
+  HIsSS {tprintf("|= ");}
+  HISss {tprintf("^= ");}
+  HISsS {tprintf(">>= ");}
+  HISSs {tprintf("<<= ");}
+  HISSS {tprintf("**= ");}
+  hiiss{NEWLINE}[ \t]* {tprintf("\\%s",yytext+5); lineno++;}
+  hiiss {error(1, "Illegal escape character '\' on line %d.\n", lineno);}
+  {NEWLINE}[ \t]* {tprintf("%s", yytext); lineno++;}
   [hH]+[iI]+[sS]+ {
     getReferencedIdentifier();
-    printf("%s ", utf8_buf);
+    tprintf("%s ", (char*)utf8_buf);
   }
   [ \t]* {/* Consume whitespace */}
 }
@@ -157,14 +165,16 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       utf8_buf[utf8_buf_len] = '\0';
       setIdentifierReference();
     }
+    info("End ID");
     yy_pop_state();
   }
   hiS[ \t] {
+    info("Begin embed");
     yy_push_state(EMBED);
   }
   {RESERVED} {
     if(getHissIndex() > 64){
-      error(1, "Invalid hiss in identifier on line %d.\n", phys_lineno);
+      error(1, "Invalid hiss in identifier on line %d.\n", lineno);
     } else {
       utf8_buf[utf8_buf_len++] = getHissIDCharacter();
     }
@@ -177,19 +187,21 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     addNewIdentifier();
   }
   [ \t] {/* Consume all whitespace */}
-  {NEWLINE} {phys_lineno++;}
+  {NEWLINE} {lineno++;}
   . {
-    error(1, "Invalid character in identifier on line %d.\n", phys_lineno);
+    error(1, "Invalid character in identifier on line %d.\n", lineno);
   }
 }
 <STRING>{
-  his {
+  his[ \t]* {
     if(utf8_buf_len > 0){
       utf8_buf[utf8_buf_len] = 0;
       print_escaped_string();
       utf8_buf_len = 0;
     }
-    printf("\" ");
+    tprintf("\"");
+    tprintf("%s", yytext+3);
+    info("End string");
     yy_pop_state();
   }
   hiS[ \t] {
@@ -198,14 +210,15 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       print_escaped_string();
       utf8_buf_len = 0;
     }
+    info("Begin embed");
     yy_push_state(EMBED);
   }
   [ \t] {/* Consume whitespace */}
   {NEWLINE} {
-    phys_lineno++;
+    lineno++;
   }
   . {
-    error(1, "Invalid character in string on line %d.\n", phys_lineno);
+    error(1, "Invalid character in string on line %d.\n", lineno);
   }
 }
 
@@ -216,17 +229,17 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       print_escaped_string();
       utf8_buf_len = 0;
     }
-    phys_lineno++;
-    log_lineno++;
-    printf("\n");
+    lineno++;
+    tprintf("\n");
+    info("End comment");
     yy_pop_state();
   }
   . {
-    printf("%c", yytext[0]);
+    tprintf("%c", yytext[0]);
   }
 }
 
-<STRING,COMMENT>[hH]+[iI]+[sS]+ {
+<STRING,COMMENT>[hH]+[iI]+[sS]+[ \t]* {
   if(utf8_buf_len > 0){
     utf8_buf[utf8_buf_len] = 0;
     print_escaped_string();
@@ -236,9 +249,10 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
   if(2 <= ind && ind <= 107){
     utf8_buf[0] = getHissStringCharacter();
     utf8_buf[1] = '\0';
+    info("String hiss code for %s", utf8_buf);
     print_escaped_string();
   } else {
-    error(1, "Invalid hiss in string on line %d.\n", phys_lineno);
+    error(1, "Invalid hiss \"%s\" in string on line %d.\n", yytext, lineno);
   }
 }
 
@@ -249,6 +263,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       print_escaped_string();
       utf8_buf_len = 0;
     }
+    info("End integer");
     yy_pop_state();
   }
   hiS[ \t]* {
@@ -257,6 +272,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       print_escaped_string();
       utf8_buf_len = 0;
     }
+    info("Begin embed");
     yy_push_state(EMBED);
   }
   [hH]+[iI]+[sS]+ {
@@ -268,16 +284,16 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     int ind = getHissIndex();
     switch(ind){
       case 2:
-        printf("-");
+        tprintf("-");
         break;
       case 3:
-        printf("0b");
+        tprintf("0b");
         break;
       case 4:
-        printf("0");
+        tprintf("0");
         break;
       case 5:
-        printf("0x");
+        tprintf("0x");
         break;
       case 6:
       case 7:
@@ -289,7 +305,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       case 13:
       case 14:
       case 15:
-        printf("%c",'0'+ind-6);
+        tprintf("%c",'0'+ind-6);
         break;
       case 16:
       case 17:
@@ -297,18 +313,19 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       case 19:
       case 20:
       case 21:
-        printf("%c",'a'+ind-16);
+        tprintf("%c",'a'+ind-16);
         break;
       default:
-        error(1, "Invalid hiss in integer on line %d.\n", phys_lineno);
+        error(1, "Invalid hiss in integer on line %d.\n", lineno);
     }
   }
   [ \t] {
     /* Consume whitespace */
   }
   . {
-    error(1, "Invalid character in integer on line %d.\n", phys_lineno);
+    error(1, "Invalid character in integer on line %d.\n", lineno);
   }
+  {NEWLINE} {lineno++;}
 }
 
 <FLOAT>{
@@ -318,6 +335,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       print_escaped_string();
       utf8_buf_len = 0;
     }
+    info("End float");
     yy_pop_state();
   }
   hiS[ \t]* {
@@ -326,6 +344,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       print_escaped_string();
       utf8_buf_len = 0;
     }
+    info("Begin embed");
     yy_push_state(EMBED);
   }
   [hH]+[iI]+[sS]+ {
@@ -337,7 +356,7 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
     int ind = getHissIndex();
     switch(ind){
       case 2:
-        printf("-");
+        tprintf("-");
         break;
       case 3:
       case 4:
@@ -349,43 +368,45 @@ RESERVED ([hH][hH]?[iI][sS])|([hH][iI][iI][sS])|([hH][iI][sS][sS][sS]?)|hiiss
       case 10:
       case 11:
       case 12:
-        printf("%c",'0'+ind-3);
+        tprintf("%c",'0'+ind-3);
         break;
       case 13:
-        printf(".");
+        tprintf(".");
         break;
       case 14:
-        printf("e");
+        tprintf("e");
       case 15:
-        printf("j");
+        tprintf("j");
       default:
-        error(1, "Invalid hiss in float on line %d.\n", phys_lineno);
+        error(1, "Invalid hiss in float on line %d.\n", lineno);
     }
   }
   [ \t] {
     /* Consume whitespace */
   }
   . {
-    error(1, "Invalid character in float on line %d.\n", phys_lineno);
+    error(1, "Invalid character in float on line %d.\n", lineno);
   }
+  {NEWLINE} {lineno++;}
 }
 
 <EMBED>{
   "his[ \t]*his" {
-    utf8_buf_len += sprintf(utf8_buf+utf8_buf_len, "his");
+    utf8_buf_len += sprintf((char*)utf8_buf+utf8_buf_len, "his");
   }
   "his[ \t]*hiS" {
-    utf8_buf_len += sprintf(utf8_buf+utf8_buf_len, "hiS");
+    utf8_buf_len += sprintf((char*)utf8_buf+utf8_buf_len, "hiS");
   }
   [ \t]hiS {
     if(yy_top_state() == INITIAL){
-      printf("%s", utf8_buf);
+      printf("%s", (char*)utf8_buf);
       utf8_buf_len = 0;
     }
+    info("End embed");
     yy_pop_state();
   }
-  . {
-    utf8_buf_len += sprintf(utf8_buf+utf8_buf_len, "%s", yytext);
+  .|\n {
+    utf8_buf_len += sprintf((char*)utf8_buf+utf8_buf_len, "%s", yytext);
   }
 }
 %%
@@ -393,6 +414,7 @@ int n_identifiers = 0;
 char* references[100];
 char* identifiers[100];
 void addNewIdentifier(){
+  info("Adding new identifier %s", yytext);;
   identifiers[n_identifiers] = malloc(yyleng+1);
   references[n_identifiers] = malloc(yyleng+1);
   strcpy(identifiers[n_identifiers], yytext);
@@ -401,22 +423,24 @@ void addNewIdentifier(){
 }
 
 void setIdentifierReference(){
+  info("Set identifier %s to reference %s", identifiers[n_identifiers-1], utf8_buf);
   free(references[n_identifiers-1]);
   references[n_identifiers-1] = malloc(utf8_buf_len+1);
-  strcpy(references[n_identifiers-1], utf8_buf);
+  strcpy(references[n_identifiers-1], (char*)utf8_buf);
 }
 
 void getReferencedIdentifier(){
   for(int i = 0; i < n_identifiers; i++){
     if(strcmp(yytext, identifiers[i]) == 0){
+      info("Found identifier %s referencing %s", yytext, references[i]);
       utf8_buf_len = strlen(references[i]);
-      strcpy(utf8_buf, references[i]);
+      strcpy((char*)utf8_buf, references[i]);
       return;
     }
   }
   addNewIdentifier();
   utf8_buf_len = yyleng;
-  strcpy(utf8_buf, yytext);
+  strcpy((char*)utf8_buf, yytext);
 }
 
 int getHissIndex(){
@@ -424,6 +448,7 @@ int getHissIndex(){
   int index = 0;
   unsigned int bin_offset = 0;
   for(char* p = yytext; *p; p++){
+    if (*p == ' ' || *p == '\t') break;
     bin_offset <<= 1;
     n++;
     switch(*p){
@@ -457,7 +482,7 @@ int getHissIndex(){
 char getHissIDCharacter(){
   int ind = getHissIndex();
   if(ind < 2){
-    error(1, "Invalid hiss in ID on line %d.\n", phys_lineno);
+    error(1, "Invalid hiss in ID on line %d.\n", lineno);
   } else if (ind < 12){
     return '0'+ind-2;
   } else if (ind < 38){
@@ -467,16 +492,17 @@ char getHissIDCharacter(){
   } else if (ind < 65){
     return 'A'+ind-39;
   } else {
-    error(1, "Invalid hiss in ID on line %d.\n", phys_lineno);
+    error(1, "Invalid hiss in ID on line %d.\n", lineno);
   }
+  return -1;
 }
 
 char getHissStringCharacter(){
-  static char shift = 0;
-  static char caps = 0;
+  static bool shift = false;
+  static bool caps = false;
   int ind = getHissIndex();
   if(ind < 2){
-    error(1, "Invalid hiss in string on line %d.\n", phys_lineno);
+    error(1, "Invalid hiss \"%s\" in string on line %d.\n", yytext, lineno);
   } else if(ind < 11){
     switch(ind){
       case 2:
@@ -508,41 +534,20 @@ char getHissStringCharacter(){
     shift = 0;
     return c;
   } else {
-    error(1, "Invalid hiss in string on line %d.\n", phys_lineno);
+    error(1, "Invalid hiss \"%s\" in string on line %d.\n", yytext, lineno);
   }
+  return -1;
 }
 void print_escaped_string(){
-  for(char* p = utf8_buf; *p; p++){
-    switch(*p){
-      case '\a':
-        printf("\\a");
-        break;
-      case '\b':
-        printf("\\b");
-        break;
-      case '\t':
-        printf("\\t");
-        break;
-      case '\n':
-        printf("\\n");
-        break;
-      case '\v':
-        printf("\\v");
-        break;
-      case '\f':
-        printf("\\f");
-        break;
-      case '\r':
-        printf("\\r");
-        break;
-      case '\\':
-        printf("\\\\");
-        break;
-      case '"':
-        printf("\\\"");
-        break;
-      default:
-        printf("%c", *p);
+  for(utf8* p = utf8_buf; *p; p++){
+    if (*p < 0x20 || 0x7F < *p){
+      tprintf("\\x%02x",*p);
+    } else if (*p == '\\'){
+      tprintf("\\\\");
+    } else if (*p == '"'){
+      tprintf("\\\"");
+    } else {
+      tprintf("%c",*p);
     }
   }
 }
@@ -550,13 +555,24 @@ void print_escaped_string(){
 void error(int exit_code, const char* error_fmt, ...){
   va_list args;
   va_start(args, error_fmt);
-  fprintf(stderr, "Error: ");
+  fprintf(stderr, "\x1b[31mError: ");
   vfprintf(stderr, error_fmt, args);
   for(int i = 0; i < n_identifiers; i++){
     free(identifiers[i]);
     free(references[i]);
   }
+  fprintf(stderr, "\x1b[0m\n");
+  va_end(args);
   exit(exit_code);
+}
+
+void info(const char* info_fmt, ...){
+  va_list args;
+  va_start(args, info_fmt);
+  fprintf(stderr, "\x1b[1;36mInfo: ");
+  vfprintf(stderr, info_fmt, args);
+  fprintf(stderr, "\x1b[0m\n");
+  va_end(args);
 }
 
 int main(){
